@@ -60,7 +60,7 @@ jobs:
         run: docker build -t ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }} ${{ matrix.image }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: 'ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }}'
           format: 'table'
