@@ -13,7 +13,7 @@ Monorepo of custom Docker images published to `ghcr.io/trly/<image>`. Each subdi
 Auto-discovers images by finding `Dockerfile`s → runs Hadolint → builds → Trivy scan → pushes to GHCR on `main`.
 
 ## Adding a New Image
-Create `<name>/Dockerfile` — the CI workflow discovers it automatically. The image tag is extracted from the final `FROM` stage's tag. You must also add a corresponding `package-ecosystem: docker` entry in `.github/dependabot.yml` for the new directory, as Dependabot doesn't support dynamic discovery.
+Create `<name>/Dockerfile` — the CI workflow discovers it automatically. The image tag is extracted from the final `FROM` stage's tag. You must also add a corresponding `package-ecosystem: docker` entry in `.github/dependabot.yml` for the new directory, as Dependabot doesn't support dynamic discovery. Include `LABEL org.opencontainers.image.source=https://github.com/trly/container-images` in the final stage to link the GHCR package to this repository.
 
 ## Code Style
 - Keep Dockerfiles minimal; use multi-stage builds when compiling from source.
