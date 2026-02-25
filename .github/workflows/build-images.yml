@@ -14,7 +14,7 @@ jobs:
       images: ${{ steps.find.outputs.images }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Find images
         id: find
@@ -31,10 +31,10 @@ jobs:
         image: ${{ fromJson(needs.discover.outputs.images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: ${{ matrix.image }}/Dockerfile
 
@@ -50,7 +50,7 @@ jobs:
         image: ${{ fromJson(needs.discover.outputs.images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Extract tag from Dockerfile
         id: tag
@@ -60,7 +60,7 @@ jobs:
         run: docker build -t ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }} ${{ matrix.image }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: 'ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }}'
           format: 'table'
