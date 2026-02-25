@@ -1,0 +1,82 @@
+name: Build Images
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  discover:
+    name: Discover images
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.find.outputs.images }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find images
+        id: find
+        run: |
+          images=$(find . -name Dockerfile -not -path './.github/*' -printf '%h\n' | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: Hadolint (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    needs: discover
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.discover.outputs.images) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.image }}/Dockerfile
+
+  build:
+    name: Build, Scan, and Publish (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    needs: [discover, lint]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.discover.outputs.images) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract tag from Dockerfile
+        id: tag
+        run: echo "version=$(grep '^FROM' ${{ matrix.image }}/Dockerfile | tail -1 | sed 's/.*://')" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build -t ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }} ${{ matrix.image }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: 'ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: docker push ghcr.io/trly/${{ matrix.image }}:${{ steps.tag.outputs.version }}
