@@ -14,7 +14,7 @@ jobs:
       images: ${{ steps.find.outputs.images }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Find images
         id: find
@@ -31,7 +31,7 @@ jobs:
         image: ${{ fromJson(needs.discover.outputs.images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -50,7 +50,7 @@ jobs:
         image: ${{ fromJson(needs.discover.outputs.images) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Extract tag from Dockerfile
         id: tag
