@@ -22,10 +22,13 @@ jobs:
           images=$(find . -name Dockerfile -not -path './.github/*' -printf '%h\n' | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(. != ""))')
           echo "images=$images" >> "$GITHUB_OUTPUT"
 
-  lint:
-    name: Hadolint (${{ matrix.image }})
+  build:
+    name: Build, Scan, and Publish (${{ matrix.image }})
     runs-on: ubuntu-24.04
     needs: discover
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         image: ${{ fromJson(needs.discover.outputs.images) }}
@@ -37,20 +40,6 @@ jobs:
         uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: ${{ matrix.image }}/Dockerfile
-
-  build:
-    name: Build, Scan, and Publish (${{ matrix.image }})
-    runs-on: ubuntu-24.04
-    needs: [discover, lint]
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        image: ${{ fromJson(needs.discover.outputs.images) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
 
       - name: Extract tag from Dockerfile
         id: tag
