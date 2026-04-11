@@ -15,43 +15,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check lint passed
-        id: lint-check
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          name: lint-passed-${{ inputs.image }}
-          path: ${{ runner.temp }}/lint-check
-        continue-on-error: true
-
-      - name: Skip if lint failed
-        if: steps.lint-check.outcome != 'success'
-        run: |
-          echo "::warning::Skipping build for ${{ inputs.image }} — lint did not pass"
-          exit 0
-
       - name: Checkout code
-        if: steps.lint-check.outcome == 'success'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
 
       - name: Prepare image metadata
-        if: steps.lint-check.outcome == 'success'
         id: meta
         run: |
           version=$(grep '^FROM' "${{ inputs.image }}/Dockerfile" | tail -1 | sed 's/.*://')
           echo "image_ref=ghcr.io/trly/${{ inputs.image }}:$version" >> "$GITHUB_OUTPUT"
 
       - name: Build image
-        if: steps.lint-check.outcome == 'success'
         run: docker build -t "${{ steps.meta.outputs.image_ref }}" "${{ inputs.image }}"
 
       - name: Archive image
-        if: steps.lint-check.outcome == 'success'
         run: docker save "${{ steps.meta.outputs.image_ref }}" | gzip > "${{ runner.temp }}/image.tar.gz"
 
       - name: Upload image artifact
-        if: steps.lint-check.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: docker-image-${{ inputs.image }}

@@ -31,45 +31,159 @@ jobs:
     with:
       image: ${{ matrix.image }}
 
-  build:
-    name: Build (${{ matrix.image }})
+  collect-build-images:
+    name: Collect Build Images
     needs: [discover, lint]
     if: "!cancelled() && needs.discover.outputs.images != '[]'"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.collect.outputs.images }}
+    steps:
+      - name: Download lint markers
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: lint-passed-*
+          path: ${{ runner.temp }}/lint-markers
+        continue-on-error: true
+
+      - name: Collect images
+        id: collect
+        env:
+          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+        run: |
+          markers_dir="${{ runner.temp }}/lint-markers"
+          passed_images='[]'
+
+          if [ -d "$markers_dir" ]; then
+            passed_images=$(find "$markers_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+              sed 's/^lint-passed-//' |
+              jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          images=$(jq -cn \
+            --argjson discovered "$DISCOVERED_IMAGES" \
+            --argjson passed "$passed_images" \
+            '$discovered | map(select(. as $image | $passed | index($image)))')
+
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.image }})
+    needs: collect-build-images
+    if: needs.collect-build-images.outputs.images != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.discover.outputs.images) }}
+        image: ${{ fromJson(needs.collect-build-images.outputs.images) }}
     uses: ./.github/workflows/build-image.yml
     with:
       image: ${{ matrix.image }}
 
-  scan:
-    name: Scan (${{ matrix.image }})
+  collect-scan-images:
+    name: Collect Scan Images
     needs: [discover, build]
     if: "!cancelled() && needs.discover.outputs.images != '[]'"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.collect.outputs.images }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: docker-image-*
+          path: ${{ runner.temp }}/build-artifacts
+        continue-on-error: true
+
+      - name: Collect images
+        id: collect
+        env:
+          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+        run: |
+          artifacts_dir="${{ runner.temp }}/build-artifacts"
+          passed_images='[]'
+
+          if [ -d "$artifacts_dir" ]; then
+            passed_images=$(find "$artifacts_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+              sed 's/^docker-image-//' |
+              jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          images=$(jq -cn \
+            --argjson discovered "$DISCOVERED_IMAGES" \
+            --argjson passed "$passed_images" \
+            '$discovered | map(select(. as $image | $passed | index($image)))')
+
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
+  scan:
+    name: Scan (${{ matrix.image }})
+    needs: collect-scan-images
+    if: needs.collect-scan-images.outputs.images != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.discover.outputs.images) }}
+        image: ${{ fromJson(needs.collect-scan-images.outputs.images) }}
     uses: ./.github/workflows/scan-image.yml
     with:
       image: ${{ matrix.image }}
 
+  collect-publish-images:
+    name: Collect Publish Images
+    needs: [discover, scan]
+    if: "!cancelled() && needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.collect.outputs.images }}
+    steps:
+      - name: Download scan markers
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: scan-passed-*
+          path: ${{ runner.temp }}/scan-markers
+        continue-on-error: true
+
+      - name: Collect images
+        id: collect
+        env:
+          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+        run: |
+          markers_dir="${{ runner.temp }}/scan-markers"
+          passed_images='[]'
+
+          if [ -d "$markers_dir" ]; then
+            passed_images=$(find "$markers_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+              sed 's/^scan-passed-//' |
+              jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          images=$(jq -cn \
+            --argjson discovered "$DISCOVERED_IMAGES" \
+            --argjson passed "$passed_images" \
+            '$discovered | map(select(. as $image | $passed | index($image)))')
+
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish (${{ matrix.image }})
-    if: "!cancelled() && needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    needs: [discover, build, scan]
+    if: needs.collect-publish-images.outputs.images != '[]'
+    needs: collect-publish-images
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.discover.outputs.images) }}
+        image: ${{ fromJson(needs.collect-publish-images.outputs.images) }}
     uses: ./.github/workflows/publish-image.yml
     with:
       image: ${{ matrix.image }}
