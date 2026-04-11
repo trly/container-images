@@ -18,7 +18,7 @@ jobs:
       head_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
   lint:
-    name: Lint (${{ matrix.image }})
+    name: Lint Images
     needs: discover
     if: needs.discover.outputs.images != '[]'
     permissions:
@@ -57,8 +57,7 @@ jobs:
           passed_images='[]'
 
           if [ -d "$markers_dir" ]; then
-            passed_images=$(find "$markers_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
-              sed 's/^lint-passed-//' |
+            passed_images=$(find "$markers_dir" -type f -name image.txt -exec cat {} + |
               jq -R -s -c 'split("\n") | map(select(. != ""))')
           fi
 
@@ -70,7 +69,7 @@ jobs:
           echo "images=$images" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build (${{ matrix.image }})
+    name: Build Images
     needs: collect-build-images
     if: needs.collect-build-images.outputs.images != '[]'
     permissions:
@@ -109,8 +108,7 @@ jobs:
           passed_images='[]'
 
           if [ -d "$artifacts_dir" ]; then
-            passed_images=$(find "$artifacts_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
-              sed 's/^docker-image-//' |
+            passed_images=$(find "$artifacts_dir" -type f -name image.txt -exec cat {} + |
               jq -R -s -c 'split("\n") | map(select(. != ""))')
           fi
 
@@ -122,7 +120,7 @@ jobs:
           echo "images=$images" >> "$GITHUB_OUTPUT"
 
   scan:
-    name: Scan (${{ matrix.image }})
+    name: Scan Images
     needs: collect-scan-images
     if: needs.collect-scan-images.outputs.images != '[]'
     permissions:
@@ -161,8 +159,7 @@ jobs:
           passed_images='[]'
 
           if [ -d "$markers_dir" ]; then
-            passed_images=$(find "$markers_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
-              sed 's/^scan-passed-//' |
+            passed_images=$(find "$markers_dir" -type f -name image.txt -exec cat {} + |
               jq -R -s -c 'split("\n") | map(select(. != ""))')
           fi
 
@@ -174,7 +171,7 @@ jobs:
           echo "images=$images" >> "$GITHUB_OUTPUT"
 
   publish:
-    name: Publish (${{ matrix.image }})
+    name: Publish Images
     if: needs.collect-publish-images.outputs.images != '[]'
     needs: collect-publish-images
     permissions:

@@ -25,10 +25,14 @@ jobs:
         with:
           dockerfile: ${{ inputs.image }}/Dockerfile
 
+      - name: Write lint marker
+        if: success()
+        run: printf '%s\n' '${{ inputs.image }}' > '${{ runner.temp }}/image.txt'
+
       - name: Upload lint passed marker
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lint-passed-${{ inputs.image }}
-          path: ${{ inputs.image }}/Dockerfile
+          path: ${{ runner.temp }}/image.txt
           retention-days: 1
