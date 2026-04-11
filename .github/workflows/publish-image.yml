@@ -7,14 +7,6 @@ on:
         description: Image directory to publish
         required: true
         type: string
-      artifact_name:
-        description: Artifact containing the built image archive
-        required: true
-        type: string
-      image_ref:
-        description: Fully qualified image reference to push
-        required: true
-        type: string
 
 jobs:
   publish:
@@ -24,10 +16,21 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Prepare image metadata
+        id: meta
+        run: |
+          version=$(grep '^FROM' "${{ inputs.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "image_ref=ghcr.io/trly/${{ inputs.image }}:$version" >> "$GITHUB_OUTPUT"
+
       - name: Download image artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
-          name: ${{ inputs.artifact_name }}
+          name: docker-image-${{ inputs.image }}
           path: ${{ runner.temp }}/image
 
       - name: Load image
@@ -41,4 +44,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
-        run: docker push ${{ inputs.image_ref }}
+        run: docker push ${{ steps.meta.outputs.image_ref }}

@@ -33,46 +33,44 @@ jobs:
 
   build:
     name: Build (${{ matrix.image }})
-    needs: lint
+    needs: [discover, lint]
+    if: needs.discover.outputs.images != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.lint.strategy.matrix.image) }}
+        image: ${{ fromJson(needs.discover.outputs.images) }}
     uses: ./.github/workflows/build-image.yml
     with:
       image: ${{ matrix.image }}
 
   scan:
     name: Scan (${{ matrix.image }})
-    needs: build
+    needs: [discover, build]
+    if: needs.discover.outputs.images != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.build.strategy.matrix.image) }}
+        image: ${{ fromJson(needs.discover.outputs.images) }}
     uses: ./.github/workflows/scan-image.yml
     with:
       image: ${{ matrix.image }}
-      artifact_name: ${{ needs.build.outputs.artifact_name }}
-      image_ref: ${{ needs.build.outputs.image_ref }}
 
   publish:
     name: Publish (${{ matrix.image }})
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build, scan]
+    if: needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [discover, build, scan]
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.build.strategy.matrix.image) }}
+        image: ${{ fromJson(needs.discover.outputs.images) }}
     uses: ./.github/workflows/publish-image.yml
     with:
       image: ${{ matrix.image }}
-      artifact_name: ${{ needs.build.outputs.artifact_name }}
-      image_ref: ${{ needs.build.outputs.image_ref }}
     secrets: inherit

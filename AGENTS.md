@@ -5,9 +5,10 @@ Monorepo of custom Docker images published to `ghcr.io/trly/<image>`. Each subdi
 
 ## Build / Lint / Test
 - **Build an image:** `docker build -t <name> <dir>` (e.g., `docker build -t caddy-porkbun caddy`)
-- **Lint a Dockerfile:** `hadolint <dir>/Dockerfile` (install via `mise install`)
+- **Lint a Dockerfile:** `hadolint <dir>/Dockerfile`
+- **Lint GitHub Actions workflows:** `actionlint`
 - **Scan for vulnerabilities:** `trivy image <image-ref>`
-- **Tools:** managed by [mise](https://mise.jdx.dev/) — run `mise install` to set up `hadolint` and `trivy`.
+- **Tools:** managed by [Nix flakes](https://nixos.wiki/wiki/Flakes) — run `nix develop` to enter a shell with `actionlint`, `hadolint`, and `trivy`.
 
 ## CI Pipeline (`.github/workflows/docker.yml`)
 Auto-discovers images by finding `Dockerfile`s → runs Hadolint → builds → Trivy scan → pushes to GHCR on `main`.
