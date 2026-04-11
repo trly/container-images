@@ -1,0 +1,26 @@
+name: Lint Image
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image directory to lint
+        required: true
+        type: string
+
+jobs:
+  lint:
+    name: Lint (${{ inputs.image }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: ${{ inputs.image }}/Dockerfile

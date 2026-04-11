@@ -1,0 +1,68 @@
+name: Discover Images
+
+on:
+  workflow_call:
+    inputs:
+      is_pull_request:
+        description: Whether the caller was triggered by a pull request event
+        required: true
+        type: boolean
+      base_sha:
+        description: Base SHA for pull request diffing
+        required: false
+        type: string
+        default: ''
+      head_sha:
+        description: Head SHA for pull request diffing
+        required: false
+        type: string
+        default: ''
+    outputs:
+      images:
+        description: JSON array of image directories to process
+        value: ${{ jobs.discover.outputs.images }}
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.find.outputs.images }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Find images
+        id: find
+        run: |
+          all_images() {
+            find . -name Dockerfile -not -path './.github/*' -printf '%h\n' |
+              sed 's|^\./||' |
+              sort -u
+          }
+
+          if [ "${{ inputs.is_pull_request }}" = "true" ]; then
+            changed_files=$(git diff --name-only \
+              "${{ inputs.base_sha }}" \
+              "${{ inputs.head_sha }}")
+
+            if printf '%s\n' "$changed_files" | grep -Eq '^(\.github/workflows/.*\.yml|\.github/dependabot\.yml)$'; then
+              images=$(all_images | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            else
+              images=$(printf '%s\n' "$changed_files" |
+                cut -d/ -f1 |
+                sort -u |
+                while read -r dir; do
+                  [ -f "$dir/Dockerfile" ] && printf '%s\n' "$dir"
+                done |
+                jq -R -s -c 'split("\n") | map(select(. != ""))')
+            fi
+          else
+            images=$(all_images | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          echo "images=$images" >> "$GITHUB_OUTPUT"

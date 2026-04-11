@@ -1,0 +1,51 @@
+name: Build Image
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image directory to build
+        required: true
+        type: string
+    outputs:
+      artifact_name:
+        description: Artifact containing the built image archive
+        value: ${{ jobs.build.outputs.artifact_name }}
+      image_ref:
+        description: Fully qualified image reference that was built
+        value: ${{ jobs.build.outputs.image_ref }}
+
+jobs:
+  build:
+    name: Build (${{ inputs.image }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Prepare image metadata
+        id: meta
+        run: |
+          version=$(grep '^FROM' "${{ inputs.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "artifact_name=docker-image-${{ inputs.image }}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=ghcr.io/trly/${{ inputs.image }}:$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build -t "${{ steps.meta.outputs.image_ref }}" "${{ inputs.image }}"
+
+      - name: Archive image
+        run: docker save "${{ steps.meta.outputs.image_ref }}" | gzip > "${{ runner.temp }}/image.tar.gz"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: ${{ runner.temp }}/image.tar.gz
+          retention-days: 1

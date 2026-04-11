@@ -1,0 +1,43 @@
+name: Scan Image
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image directory being scanned
+        required: true
+        type: string
+      artifact_name:
+        description: Artifact containing the built image archive
+        required: true
+        type: string
+      image_ref:
+        description: Fully qualified image reference to scan
+        required: true
+        type: string
+
+jobs:
+  scan:
+    name: Scan (${{ inputs.image }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/image
+
+      - name: Load image
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: ${{ inputs.image_ref }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH

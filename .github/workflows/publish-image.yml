@@ -1,0 +1,44 @@
+name: Publish Image
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image directory to publish
+        required: true
+        type: string
+      artifact_name:
+        description: Artifact containing the built image archive
+        required: true
+        type: string
+      image_ref:
+        description: Fully qualified image reference to push
+        required: true
+        type: string
+
+jobs:
+  publish:
+    name: Publish (${{ inputs.image }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/image
+
+      - name: Load image
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        run: docker push ${{ inputs.image_ref }}
