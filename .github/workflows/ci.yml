@@ -34,7 +34,7 @@ jobs:
   build:
     name: Build (${{ matrix.image }})
     needs: [discover, lint]
-    if: needs.discover.outputs.images != '[]'
+    if: "!cancelled() && needs.discover.outputs.images != '[]'"
     permissions:
       contents: read
     strategy:
@@ -48,7 +48,7 @@ jobs:
   scan:
     name: Scan (${{ matrix.image }})
     needs: [discover, build]
-    if: needs.discover.outputs.images != '[]'
+    if: "!cancelled() && needs.discover.outputs.images != '[]'"
     permissions:
       contents: read
     strategy:
@@ -61,7 +61,7 @@ jobs:
 
   publish:
     name: Publish (${{ matrix.image }})
-    if: needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: "!cancelled() && needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
     needs: [discover, build, scan]
     permissions:
       contents: read

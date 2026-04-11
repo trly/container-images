@@ -24,3 +24,11 @@ jobs:
         uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
           dockerfile: ${{ inputs.image }}/Dockerfile
+
+      - name: Upload lint passed marker
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lint-passed-${{ inputs.image }}
+          path: ${{ inputs.image }}/Dockerfile
+          retention-days: 1
