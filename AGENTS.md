@@ -1,23 +1,22 @@
 # AGENTS.md
 
-## Project Overview
-Monorepo of custom Docker images published to `ghcr.io/trly/<image>`. Each subdirectory (e.g., `caddy/`) contains a `Dockerfile` and optional `README.md`. Currently ships a Caddy image with the `caddy-dns/porkbun` module.
-
-## Build / Lint / Test
-- **Build an image:** `docker build -t <name> <dir>` (e.g., `docker build -t caddy-porkbun caddy`)
-- **Lint a Dockerfile:** `hadolint <dir>/Dockerfile`
-- **Lint GitHub Actions workflows:** `actionlint`
-- **Scan for vulnerabilities:** `trivy image <image-ref>`
-- **Tools:** managed by [Nix flakes](https://nixos.wiki/wiki/Flakes) — run `nix develop` to enter a shell with `actionlint`, `hadolint`, and `trivy`.
-
-## CI Pipeline (`.github/workflows/docker.yml`)
-Auto-discovers images by finding `Dockerfile`s → runs Hadolint → builds → Trivy scan → pushes to GHCR on `main`.
-
-## Adding a New Image
-Create `<name>/Dockerfile` — the CI workflow discovers it automatically. The image tag is extracted from the final `FROM` stage's tag. You must also add a corresponding `package-ecosystem: docker` entry in `.github/dependabot.yml` for the new directory, as Dependabot doesn't support dynamic discovery. Include `LABEL org.opencontainers.image.source=https://github.com/trly/container-images` in the final stage to link the GHCR package to this repository.
-
-## Code Style
-- Keep Dockerfiles minimal; use multi-stage builds when compiling from source.
-- Follow [Hadolint](https://github.com/hadolint/hadolint) best practices (the linter enforces this).
-- Pin base image tags to specific versions (e.g., `caddy:2.11`, not `caddy:latest`).
-- Exclude non-essential files from the build context via `.dockerignore`.
+- Repo: monorepo of Docker images published to `ghcr.io/trly/<image>`; each top-level directory with a `Dockerfile` is one image.
+- Current subprojects: `caddy/` builds Caddy with `caddy-dns/porkbun` via `xcaddy`; `kanboard/` extends upstream Kanboard and installs the OAuth2 and MCP plugins.
+- There is no app server, internal database, or runtime API here; the main internal automation surface is GitHub Actions plus `.github/scripts/discover-images.sh`.
+- CI entrypoint is `.github/workflows/ci.yml`, which calls reusable `setup`, `lint-image`, `build-image`, `scan-image`, and `publish-image` workflows.
+- Changed images are discovered by diffing top-level directories and keeping only those that contain `Dockerfile` files.
+- Image tags are derived from the final `FROM` line in each `Dockerfile`; keep that line explicit and version-pinned.
+- Use Nix for local tooling: run `nix develop` before local lint/scan work, or prefix commands with `nix develop -c ...`; do not assume `hadolint`, `actionlint`, or `trivy` are installed globally.
+- Build one image: `docker build -t ghcr.io/trly/<image>:<tag> <image-dir>`.
+- Lint one image: `nix develop -c hadolint <image-dir>/Dockerfile`.
+- Lint workflows: `nix develop -c actionlint`.
+- Single-image validation: there is no unit-test runner; emulate CI with `nix develop -c hadolint <dir>/Dockerfile`, `docker build -t <tag> <dir>`, then `nix develop -c trivy image <tag>`.
+- Scan one built image: `nix develop -c trivy image <tag>`.
+- When adding an image, create `<name>/Dockerfile`, keep directory name == published image name, and add a matching `package-ecosystem: docker` entry in `.github/dependabot.yml`.
+- Keep Dockerfiles minimal and readable; prefer inline logic, and use multi-stage builds only when they materially simplify compilation or packaging.
+- Pin upstream image tags and plugin/archive versions; never switch to floating tags like `latest`.
+- Keep `LABEL org.opencontainers.image.source=https://github.com/trly/container-images` in the final stage so GHCR links back to this repo.
+- Preserve the current layout: one image per top-level directory, optional sibling `README.md`, and root `.dockerignore` for excluding non-essential build context.
+- For `.github/scripts/*.sh`, keep `#!/usr/bin/env bash` with `set -euo pipefail`, use simple pipeline-based transforms, and prefer repo-root-relative paths.
+- Naming should stay lowercase and directory-driven; workflow inputs/outputs should remain plain strings or JSON arrays, matching the existing reusable workflow pattern.
+- No `.cursor/rules/`, `.cursorrules`, `CLAUDE.md`, `.windsurfrules`, `.clinerules`, `.goosehints`, or `.github/copilot-instructions.md` files are present in this repository.

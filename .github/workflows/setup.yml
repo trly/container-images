@@ -1,0 +1,42 @@
+name: Setup
+
+on:
+  workflow_call:
+    inputs:
+      base_sha:
+        description: Base SHA for diffing changed image directories
+        required: false
+        type: string
+        default: ''
+      head_sha:
+        description: Head SHA for diffing changed image directories
+        required: false
+        type: string
+        default: ''
+    outputs:
+      images:
+        description: JSON array of changed image directories to process
+        value: ${{ jobs.setup.outputs.images }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.find.outputs.images }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Find changed images
+        id: find
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          images="$(${GITHUB_WORKSPACE}/.github/scripts/discover-images.sh "$BASE_SHA" "$HEAD_SHA")"
+          echo "images=$images" >> "$GITHUB_OUTPUT"

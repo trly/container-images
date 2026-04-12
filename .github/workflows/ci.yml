@@ -7,34 +7,33 @@ on:
   pull_request:
 
 jobs:
-  discover:
-    name: Discover Images
+  setup:
+    name: Setup
     permissions:
       contents: read
-    uses: ./.github/workflows/discover-images.yml
+    uses: ./.github/workflows/setup.yml
     with:
-      is_pull_request: ${{ github.event_name == 'pull_request' }}
-      base_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-      head_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+      base_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before || '' }}
+      head_sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
   lint:
     name: Lint Images
-    needs: discover
-    if: needs.discover.outputs.images != '[]'
+    needs: setup
+    if: needs.setup.outputs.images != '[]'
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.discover.outputs.images) }}
+        image: ${{ fromJson(needs.setup.outputs.images) }}
     uses: ./.github/workflows/lint-image.yml
     with:
       image: ${{ matrix.image }}
 
   collect-build-images:
     name: Collect Build Images
-    needs: [discover, lint]
-    if: "!cancelled() && needs.discover.outputs.images != '[]'"
+    needs: [setup, lint]
+    if: "!cancelled() && needs.setup.outputs.images != '[]'"
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -51,7 +50,7 @@ jobs:
       - name: Collect images
         id: collect
         env:
-          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+          DISCOVERED_IMAGES: ${{ needs.setup.outputs.images }}
         run: |
           markers_dir="${{ runner.temp }}/lint-markers"
           passed_images='[]'
@@ -84,8 +83,8 @@ jobs:
 
   collect-scan-images:
     name: Collect Scan Images
-    needs: [discover, build]
-    if: "!cancelled() && needs.discover.outputs.images != '[]'"
+    needs: [setup, build]
+    if: "!cancelled() && needs.setup.outputs.images != '[]'"
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -102,7 +101,7 @@ jobs:
       - name: Collect images
         id: collect
         env:
-          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+          DISCOVERED_IMAGES: ${{ needs.setup.outputs.images }}
         run: |
           artifacts_dir="${{ runner.temp }}/build-artifacts"
           passed_images='[]'
@@ -135,8 +134,8 @@ jobs:
 
   collect-publish-images:
     name: Collect Publish Images
-    needs: [discover, scan]
-    if: "!cancelled() && needs.discover.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    needs: [setup, scan]
+    if: "!cancelled() && needs.setup.outputs.images != '[]' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -153,7 +152,7 @@ jobs:
       - name: Collect images
         id: collect
         env:
-          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+          DISCOVERED_IMAGES: ${{ needs.setup.outputs.images }}
         run: |
           markers_dir="${{ runner.temp }}/scan-markers"
           passed_images='[]'
