@@ -1,0 +1,11 @@
+# go-jose: JWE DoS — not affected; no JWT/JWE handling in our Caddyfiles
+CVE-2026-34986
+
+# smallstep/certificates: SCEP unauthenticated issuance — not affected; no acme_server directive used
+CVE-2026-30836
+
+# otel/sdk: PATH hijack on BSD kenv — not affected; no tracing/otel configured, and we run on Linux
+CVE-2026-39883
+
+# grpc authz bypass — not affected; no gRPC or authorization policies configured
+CVE-2026-33186

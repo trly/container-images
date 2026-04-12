@@ -44,6 +44,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          trivyignores: ${{ inputs.image }}/.trivyignore
 
       - name: Write scan marker
         if: success()
