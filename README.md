@@ -4,8 +4,9 @@
 
 Monorepo of container images published to `ghcr.io/trly/<image>`. Each
 top-level directory that contains a `Dockerfile` defines exactly one
-published image; the directory name is the image name. Today the repo
-ships:
+published image; the directory name is the image name
+
+## Managed Images
 
 - **caddy** — [Caddy](https://caddyserver.com/) built with the
   [`caddy-dns/porkbun`](https://github.com/caddy-dns/porkbun) DNS provider
