@@ -1,0 +1,180 @@
+name: Publish main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-main
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Plan
+    # A force push rewrites history, so the pushed diff describes nothing that
+    # was reviewed and github.event.before may not even be reachable. Skipping
+    # plan skips build, scan, and publish with it; recover with an ordinary push.
+    if: ${{ !github.event.forced && !github.event.deleted }}
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Publishing only changed images avoids replacing an existing image tag.
+      - id: plan
+        uses: ./.github/actions/discover-images
+        with:
+          base-sha: ${{ github.event.before }}
+          head-sha: ${{ github.sha }}
+          require-base: 'true'
+
+      - name: Confirm main is current
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          head_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)
+          if [[ "$head_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing to publish superseded commit $GITHUB_SHA; main is at $head_sha" >&2
+            exit 1
+          fi
+
+  build:
+    name: Build (${{ matrix.image }})
+    needs: plan
+    if: needs.plan.outputs.images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.images) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+        with:
+          dockerfile: ${{ matrix.image }}/Dockerfile
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(grep '^FROM' "${{ matrix.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "image_ref=ghcr.io/trly/${{ matrix.image }}:$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build -t "${{ steps.meta.outputs.image_ref }}" "${{ matrix.image }}"
+
+      - name: Archive image
+        run: docker save "${{ steps.meta.outputs.image_ref }}" | gzip > "${{ runner.temp }}/image.tar.gz"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  scan:
+    name: Scan (${{ matrix.image }})
+    needs: [plan, build]
+    if: needs.plan.outputs.images != '[]'
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.images) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(grep '^FROM' "${{ matrix.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "image_ref=ghcr.io/trly/${{ matrix.image }}:$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image
+
+      - name: Load image
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image_ref }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          trivyignores: ${{ matrix.image }}/.trivyignore
+
+  publish:
+    name: Publish (${{ matrix.image }})
+    needs: [plan, build, scan]
+    if: needs.plan.outputs.images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.images) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image
+
+      - name: Load image
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
+
+      - name: Confirm main is current
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          head_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)
+          if [[ "$head_sha" != "$GITHUB_SHA" ]]; then
+            echo "Refusing to publish superseded commit $GITHUB_SHA; main is at $head_sha" >&2
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        shell: bash
+        run: |
+          version=$(grep '^FROM' "${{ matrix.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          docker push "ghcr.io/trly/${{ matrix.image }}:$version"

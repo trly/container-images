@@ -1,0 +1,46 @@
+name: Discover images
+description: >-
+  Lists image directories affected by the change between a base and head commit
+  and emits them as a JSON array. Requires a prior actions/checkout with
+  fetch-depth: 0 so both commits and their merge base are available.
+inputs:
+  base-sha:
+    description: >-
+      Base commit for the diff. When it is missing, unreachable, or shares no
+      merge base with the head, every current image is selected unless
+      require-base is set.
+    required: false
+    default: ''
+  head-sha:
+    description: Head commit the diff is computed against.
+    required: true
+  require-base:
+    description: >-
+      Set to 'true' to fail instead of selecting every current image when the
+      base commit is unusable. Callers that publish must set this, because
+      selecting an unchanged image republishes its existing tag.
+    required: false
+    default: 'false'
+  full-rebuild-paths:
+    description: >-
+      Newline-separated glob patterns for shared build inputs. When a changed
+      path matches one, every current image is selected instead of only the
+      changed directories. Callers that publish must leave this empty, because
+      selecting an unchanged image republishes its existing tag.
+    required: false
+    default: ''
+outputs:
+  images:
+    description: JSON array of image directory names.
+    value: ${{ steps.diff.outputs.images }}
+runs:
+  using: composite
+  steps:
+    - id: diff
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        FULL_REBUILD_PATHS: ${{ inputs.full-rebuild-paths }}
+        REQUIRE_BASE: ${{ inputs.require-base }}
+      run: '"$GITHUB_ACTION_PATH/discover.sh"'

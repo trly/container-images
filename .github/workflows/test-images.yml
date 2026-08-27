@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover images
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: plan
+        uses: ./.github/actions/discover-images
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          # Root build inputs affect every image, so validate the full matrix.
+          full-rebuild-paths: |
+            .dockerignore
+            .github/workflows/test-images.yml
+            .github/actions/discover-images/*
+
+  build:
+    name: Build (${{ matrix.image }})
+    needs: discover
+    if: needs.discover.outputs.images != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.discover.outputs.images) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+        with:
+          dockerfile: ${{ matrix.image }}/Dockerfile
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(grep '^FROM' "${{ matrix.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "image_ref=ghcr.io/trly/${{ matrix.image }}:$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build -t "${{ steps.meta.outputs.image_ref }}" "${{ matrix.image }}"
+
+      - name: Archive image
+        run: docker save "${{ steps.meta.outputs.image_ref }}" | gzip > "${{ runner.temp }}/image.tar.gz"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  scan:
+    name: Scan (${{ matrix.image }})
+    needs: [discover, build]
+    if: needs.discover.outputs.images != '[]'
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.discover.outputs.images) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Prepare image metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(grep '^FROM' "${{ matrix.image }}/Dockerfile" | tail -1 | sed 's/.*://')
+          echo "image_ref=ghcr.io/trly/${{ matrix.image }}:$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-image-${{ matrix.image }}
+          path: ${{ runner.temp }}/image
+
+      - name: Load image
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image_ref }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          trivyignores: ${{ matrix.image }}/.trivyignore
+
+  ci:
+    name: CI
+    needs: [discover, build, scan]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require successful CI checks
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          DISCOVERED_IMAGES: ${{ needs.discover.outputs.images }}
+          DISCOVER_RESULT: ${{ needs.discover.result }}
+          SCAN_RESULT: ${{ needs.scan.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$DISCOVER_RESULT" != success ]]; then
+            echo "Image discovery did not succeed: $DISCOVER_RESULT" >&2
+            exit 1
+          fi
+
+          if [[ "$DISCOVERED_IMAGES" == '[]' ]]; then
+            echo 'No image changes require validation.'
+            exit 0
+          fi
+
+          if [[ "$BUILD_RESULT" != success ]]; then
+            echo "Image build did not succeed: $BUILD_RESULT" >&2
+            exit 1
+          fi
+
+          if [[ "$SCAN_RESULT" != success ]]; then
+            echo "Image scan did not succeed: $SCAN_RESULT" >&2
+            exit 1
+          fi

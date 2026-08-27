@@ -2,9 +2,9 @@
 
 - Repo: monorepo of Docker images published to `ghcr.io/trly/<image>`; each top-level directory with a `Dockerfile` is one image.
 - Current subprojects: `caddy/` builds Caddy with `caddy-dns/porkbun` via `xcaddy`; `kanboard/` extends upstream Kanboard and installs the OAuth2 and MCP plugins.
-- There is no app server, internal database, or runtime API here; the main internal automation surface is GitHub Actions plus `.github/scripts/discover-images.sh`.
-- CI entrypoint is `.github/workflows/ci.yml`, which calls reusable `setup`, `lint-image`, `build-image`, `scan-image`, and `publish-image` workflows.
-- Changed images are discovered by diffing top-level directories and keeping only those that contain `Dockerfile` files.
+- There is no app server, internal database, or runtime API here; the main internal automation surface is GitHub Actions plus `.github/actions/discover-images/discover.sh`.
+- Pull requests run `.github/workflows/test-images.yml`; pushes to `main` run `.github/workflows/publish.yml`.
+- Changed images are discovered by `.github/actions/discover-images`, which diffs top-level directories and keeps only those containing `Dockerfile` files.
 - Image tags are derived from the final `FROM` line in each `Dockerfile`; keep that line explicit and version-pinned.
 - Use Nix for local tooling: run `nix develop` before local lint/scan work, or prefix commands with `nix develop -c ...`; do not assume `hadolint`, `actionlint`, or `trivy` are installed globally.
 - Build one image: `docker build -t ghcr.io/trly/<image>:<tag> <image-dir>`.
@@ -17,6 +17,6 @@
 - Pin upstream image tags and plugin/archive versions; never switch to floating tags like `latest`.
 - Keep `LABEL org.opencontainers.image.source=https://github.com/trly/container-images` in the final stage so GHCR links back to this repo.
 - Preserve the current layout: one image per top-level directory, optional sibling `README.md`, and root `.dockerignore` for excluding non-essential build context.
-- For `.github/scripts/*.sh`, keep `#!/usr/bin/env bash` with `set -euo pipefail`, use simple pipeline-based transforms, and prefer repo-root-relative paths.
-- Naming should stay lowercase and directory-driven; workflow inputs/outputs should remain plain strings or JSON arrays, matching the existing reusable workflow pattern.
+- For `.github/actions/*/*.sh`, keep `#!/usr/bin/env bash` with `set -euo pipefail`, use simple pipeline-based transforms, and prefer repo-root-relative paths.
+- Naming should stay lowercase and directory-driven; discovery outputs are JSON arrays, and per-image build artifacts are passed between build, scan, and publish matrices.
 - No `.cursor/rules/`, `.cursorrules`, `CLAUDE.md`, `.windsurfrules`, `.clinerules`, `.goosehints`, or `.github/copilot-instructions.md` files are present in this repository.
