@@ -6,12 +6,12 @@
 - Pull requests run `.github/workflows/test-images.yml`; pushes to `main` run `.github/workflows/publish.yml`.
 - Changed images are discovered by `.github/actions/discover-images`, which diffs top-level directories and keeps only those containing `Dockerfile` files.
 - Image tags are derived from the final `FROM` line in each `Dockerfile`; keep that line explicit and version-pinned.
-- Use Nix for local tooling: run `nix develop` before local lint/scan work, or prefix commands with `nix develop -c ...`; do not assume `hadolint`, `actionlint`, or `trivy` are installed globally.
+- Use Mise for local tooling: run `mise install` before local lint/scan work, then use `mise exec -- ...`; do not assume `hadolint`, `actionlint`, or `trivy` are installed globally.
 - Build one image: `docker build -t ghcr.io/trly/<image>:<tag> <image-dir>`.
-- Lint one image: `nix develop -c hadolint <image-dir>/Dockerfile`.
-- Lint workflows: `nix develop -c actionlint`.
-- Single-image validation: there is no unit-test runner; emulate CI with `nix develop -c hadolint <dir>/Dockerfile`, `docker build -t <tag> <dir>`, then `nix develop -c trivy image <tag>`.
-- Scan one built image: `nix develop -c trivy image <tag>`.
+- Lint one image: `mise exec -- hadolint <image-dir>/Dockerfile`.
+- Lint workflows: `mise exec -- actionlint`.
+- Single-image validation: there is no unit-test runner; emulate CI with `mise exec -- hadolint <dir>/Dockerfile`, `docker build -t <tag> <dir>`, then `mise exec -- trivy image <tag>`.
+- Scan one built image: `mise exec -- trivy image <tag>`.
 - When adding an image, create `<name>/Dockerfile`, keep directory name == published image name, and add a matching `package-ecosystem: docker` entry in `.github/dependabot.yml`.
 - Keep Dockerfiles minimal and readable; prefer inline logic, and use multi-stage builds only when they materially simplify compilation or packaging.
 - Pin upstream image tags and plugin/archive versions; never switch to floating tags like `latest`.

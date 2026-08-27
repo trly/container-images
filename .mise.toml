@@ -1,0 +1,4 @@
+[tools]
+actionlint = "latest"
+hadolint = "latest"
+trivy = "latest"
