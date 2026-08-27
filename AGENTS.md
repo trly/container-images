@@ -10,9 +10,10 @@
 - Build one image: `docker build -t ghcr.io/trly/<image>:<tag> <image-dir>`.
 - Lint one image: `mise exec -- hadolint <image-dir>/Dockerfile`.
 - Lint workflows: `mise exec -- actionlint`.
-- Single-image validation: there is no unit-test runner; emulate CI with `mise exec -- hadolint <dir>/Dockerfile`, `docker build -t <tag> <dir>`, then `mise exec -- trivy image <tag>`.
-- Scan one built image: `mise exec -- trivy image <tag>`.
-- When adding an image, create `<name>/Dockerfile`, keep directory name == published image name, and add a matching `package-ecosystem: docker` entry in `.github/dependabot.yml`.
+- Single-image validation: there is no unit-test runner; emulate CI with `mise exec -- hadolint <dir>/Dockerfile`, `docker build -t <tag> <dir>`, then `mise exec -- trivy image --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH --ignorefile <dir>/.trivyignore <tag>`.
+- Scan one built image: `mise exec -- trivy image --exit-code 1 --ignore-unfixed --vuln-type os,library --severity CRITICAL,HIGH --ignorefile <dir>/.trivyignore <tag>`.
+- Every image directory must include a `.trivyignore` file, even when it has no entries: CI always passes `<image>/.trivyignore` to Trivy. Add only documented, accepted vulnerability IDs to this file; do not use it to bypass failures without a concrete review.
+- When adding an image, create `<name>/Dockerfile` and `<name>/.trivyignore`, keep directory name == published image name, and add a matching `package-ecosystem: docker` entry in `.github/dependabot.yml`.
 - Keep Dockerfiles minimal and readable; prefer inline logic, and use multi-stage builds only when they materially simplify compilation or packaging.
 - Pin upstream image tags and plugin/archive versions; never switch to floating tags like `latest`.
 - Keep `LABEL org.opencontainers.image.source=https://github.com/trly/container-images` in the final stage so GHCR links back to this repo.
