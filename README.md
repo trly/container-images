@@ -70,7 +70,9 @@ Adding a new image (per [`AGENTS.md`](AGENTS.md)):
    derived from it by the image build workflows.
 3. Keep `LABEL org.opencontainers.image.source=https://github.com/trly/container-images`
    in the final stage so GHCR links back to this repo.
-4. Add a matching `package-ecosystem: docker` entry in
+4. Add `<name>/.grype.yaml` with image-specific Grype ignore rules (or `ignore: []`
+   when none are needed); CI and publishing both load this file.
+5. Add a matching `package-ecosystem: docker` entry in
    [`.github/dependabot.yml`](.github/dependabot.yml).
 
 ## System context
@@ -79,8 +81,9 @@ CI in [`.github/workflows/test-images.yml`](.github/workflows/test-images.yml)
 and [`.github/workflows/publish.yml`](.github/workflows/publish.yml) discover
 changed image directories with
 [`.github/actions/discover-images`](.github/actions/discover-images), then
-build, scan, and pass each image artifact through its matrix. Publishing only
-runs on pushes to `main`.
+build, scan with [Anchore's Grype action](https://github.com/anchore/scan-action),
+and pass each image artifact through its matrix. Publishing only runs on pushes
+to `main`.
 
 | Adjacent component | Relationship | Evidence |
 | --- | --- | --- |
