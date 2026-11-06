@@ -3,6 +3,8 @@ FROM docker.io/library/caddy:builder AS builder
 RUN xcaddy build \
     --with github.com/caddy-dns/porkbun \
     --replace golang.org/x/net=golang.org/x/net@v0.62.0
+    --with github.com/caddy-dns/porkbun \
+    --with github.com/caddy-dns/cloudflare
 
 FROM docker.io/library/caddy:2.11.9
 
