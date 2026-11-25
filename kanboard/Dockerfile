@@ -1,4 +1,4 @@
-FROM docker.io/kanboard/kanboard:v1.2.57
+FROM docker.io/kanboard/kanboard:v1.2.58
 
 RUN apk update --no-cache && apk upgrade --no-cache
 
